@@ -79,6 +79,56 @@ function parseLinks(msg){
   return res
 }
 
+function getplaintext(msg){
+  //This function removes SSML tags
+
+  msg = msg.replace(/<amazon:effect[^>]*>/g,'')
+  msg = msg.replace(/<\/amazon:effect>/g,'')
+
+  msg = msg.replace(/<audio[^>]*>/g,'')
+
+  msg = msg.replace(/<break[^>]*>/g,'')
+
+  msg = msg.replace(/<emphasis[^>]*>/g,'')
+  msg = msg.replace(/<\/emphasis>/g,'')
+
+  msg = msg.replace(/<p>/g,'')
+  msg = msg.replace(/<\/p>/g,'')
+
+  msg = msg.replace(/<phoneme[^>]*>/g,'')
+  msg = msg.replace(/<\/phoneme>/g,'')
+
+  msg = msg.replace(/<prosody[^>]*>/g,'')
+  msg = msg.replace(/<\/prosody>/g,'')
+
+  msg = msg.replace(/<s>/g,'')
+  msg = msg.replace(/<\/s>/g,'')
+
+  msg = msg.replace(/<say-as[^>]*>/g,'')
+  msg = msg.replace(/<\/say-as>/g,'')
+
+  msg = msg.replace(/<sub alias[^>]*>/g,'')
+  msg = msg.replace(/<\/sub>/g,'')
+
+  msg = msg.replace(/<w role[^>]*>/g,'')
+  msg = msg.replace(/<\/w>/g,'')
+
+  msg = msg.replace(/<speak>/g,'')
+  msg = msg.replace(/<\/speak>/g,'')
+
+  return msg
+}
+
+function fixIntuitPhrases(msg){
+  // speak Lacerte correctly
+  msg = msg.replace(/Lacerte/g,'<phoneme alphabet="ipa" ph="ləˈsɚt">Lacerte</phoneme>')
+
+  // speak 4-digit tax form numbers correctly 
+  msg = msg.replace(/ (\d\d)(\d\d)([^\d])/g," <sub alias=\"$1 $2\">$1$2</sub>$3")
+
+  return msg
+}
+
 exports.error=function(err,params){
     console.log(err)
     if(process.env.TYPE="API"){
@@ -123,6 +173,8 @@ exports.success=function(message,params){
           linkmsg += ' ' + links.mlink[i].attachmentLinkUrl
         }
       }
+      links.text = fixIntuitPhrases(links.text)
+      const plaintext = getplaintext(links.text)
       const out={
         "version": "1.0",
         "sessionAttributes":params.Session,
@@ -135,7 +187,7 @@ exports.success=function(message,params){
             card:{
               type: "Standard",
               title: message.question,
-              text: links.text + linkmsg
+              text: plaintext + linkmsg
             }
         }
       }
@@ -145,16 +197,26 @@ exports.success=function(message,params){
       if(message.r && message.r.title){
           out.response.card.title=message.r.title
       }
+
+      if(plaintext !== links.text){
+        out.response.outputSpeech.type="SSML"
+        out.response.outputSpeech.ssml="<speak>"+links.text+"</speak>"
+        out.response.outputSpeech.text=""
+      }
+
       return out
     } else { //lex
       const links = parseLinks(message.msg)
+      links.text = "<speak>"+fixIntuitPhrases(links.text)+"</speak>"
+      const plaintext = getplaintext(links.text)
       var out = {
         sessionAttributes: params.Session,
         dialogAction: {
           type: "Close",
           fulfillmentState: "Fulfilled",
           message: {
-            contentType: "PlainText",
+            //contentType: "PlainText",
+            contentType: "SSML",
             content: links.text
           }
         }
